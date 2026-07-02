@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Level Up Wheel</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #18181b;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .wheel-wrapper {
+            position: relative;
+            width: 320px;
+            height: 320px;
+            margin-bottom: 30px;
+        }
+
+        /* Стрелка указателя сверху */
+        .pointer {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-top: 25px solid #ef4444;
+            z-index: 10;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            transition: transform 4s cubic-bezier(0.25, 0.1, 0.25, 1);
+        }
+
+        .spin-btn {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4);
+            transition: transform 0.2s;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .spin-btn:active {
+            transform: scale(0.95);
+        }
+
+        .spin-btn:disabled {
+            background: #3f3f46;
+            color: #a1a1aa;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        #result {
+            margin-top: 20px;
+            font-size: 20px;
+            font-weight: 600;
+            min-height: 30px;
+            text-align: center;
+            color: #a78bfa;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="wheel-wrapper">
+        <div class="pointer"></div>
+        <canvas id="wheel" width="600" height="600"></canvas>
+    </div>
+
+    <button class="spin-btn" id="spin-btn">КРУТИТЬ</button>
+    <div id="result"></div>
+
+    <script>
+        // Инициализация Telegram WebApp
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand(); // Разворачивает аппку на весь экран айфона
+
+        const canvas = document.getElementById('wheel');
+        const ctx = canvas.getContext('2d');
+        const spinBtn = document.getElementById('spin-btn');
+        const resultDiv = document.getElementById('result');
+
+        // 10 позиций (можешь переименовать их как угодно)
+        const sectors = [
+            "Позиция 1", "Позиция 2", "Позиция 3", "Позиция 4", "Позиция 5",
+            "Позиция 6", "Позиция 7", "Позиция 8", "Позиция 9", "Позиция 10"
+        ];
+
+        const numSectors = sectors.length;
+        const arc = 2 * Math.PI / numSectors;
+        
+        // Палитра чередующихся цветов для секторов
+        const colors = ['#27272a', '#3f3f46']; 
+
+        // Отрисовка колеса
+        function drawWheel() {
+            const center = canvas.width / 2;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (let i = 0; i < numSectors; i++) {
+                const angle = i * arc;
+                
+                // Рисуем сектор
+                ctx.fillStyle = colors[i % colors.length];
+                ctx.beginPath();
+                ctx.moveTo(center, center);
+                ctx.arc(center, center, center - 10, angle, angle + arc);
+                ctx.lineTo(center, center);
+                ctx.fill();
+
+                // Обводка секторов
+                ctx.strokeStyle = '#52525b';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Добавляем текст
+                ctx.save();
+                ctx.translate(center, center);
+                ctx.rotate(angle + arc / 2);
+                ctx.textAlign = "right";
+                ctx.fillStyle = "#ffffff";
+                ctx.font = "bold 22px sans-serif";
+                ctx.fillText(sectors[i], center - 40, 10);
+                ctx.restore();
+            }
+        }
+
+        drawWheel();
+
+        let isSpinning = false;
+
+        spinBtn.addEventListener('click', () => {
+            if (isSpinning) return;
+            isSpinning = true;
+            spinBtn.disabled = true;
+            resultDiv.innerText = "";
+
+            // 1. Честный выбор случайного индекса от 0 до 9 (у всех шанс ровно 10%)
+            const winningIndex = Math.floor(Math.random() * numSectors);
+            
+            // 2. Считаем угол, чтобы выбранный сектор остановился ровно под верхней стрелкой
+            const sectorDegrees = 360 / numSectors;
+            const targetDegrees = 270 - (winningIndex * sectorDegrees + sectorDegrees / 2);
+            
+            // Добавляем 5 полных оборотов для эффекта долгого вращения
+            const totalRotation = (360 * 5) + targetDegrees;
+
+            // Запускаем вращение через CSS
+            canvas.style.transform = `rotate(${totalRotation}deg)`;
+
+            // Ждем завершения анимации (4 секунды)
+            setTimeout(() => {
+                isSpinning = false;
+                spinBtn.disabled = false;
+                
+                // Выводим результат
+                resultDiv.innerText = `Выпало: ${sectors[winningIndex]}`;
+                
+                // Сбрасываем угол без анимации для следующего захода
+                canvas.style.transition = 'none';
+                const finalAngle = totalRotation % 360;
+                canvas.style.transform = `rotate(${finalAngle}deg)`;
+                // Возвращаем плавность обратно
+                setTimeout(() => {
+                    canvas.style.transition = 'transform 4s cubic-bezier(0.25, 0.1, 0.25, 1)';
+                }, 50);
+
+                // Опционально: можно отправить вибрацию на айфон через Telegram SDK
+                if (tg.HapticFeedback) {
+                    tg.HapticFeedback.notificationOccurred('success');
+                }
+
+            }, 4000);
+        });
+    </script>
+</body>
+</html>
