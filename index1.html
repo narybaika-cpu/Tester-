@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Level Up Лояльность</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #1c1c1e;
+            color: #ffffff;
+            margin: 0;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .card {
+            background: #2c2c2e;
+            border-radius: 16px;
+            padding: 20px;
+            width: 90%;
+            max-width: 360px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            margin-bottom: 15px;
+        }
+        h2 { margin-top: 0; color: #ff9500; text-align: center; }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        .progress-container {
+            background: #48484a;
+            border-radius: 8px;
+            height: 12px;
+            width: 100%;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-bar {
+            background: #34c759;
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .btn {
+            background: #ff9500;
+            color: black;
+            border: none;
+            border-radius: 12px;
+            padding: 14px;
+            font-size: 16px;
+            font-weight: bold;
+            width: 100%;
+            margin-top: 10px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn:active { background: #e08400; }
+        .btn-secondary { background: #3a3a3c; color: #ffffff; }
+        .btn-secondary:active { background: #48484a; }
+        .perks {
+            font-size: 14px;
+            color: #aeaeb2;
+            font-style: italic;
+            text-align: center;
+            margin-top: 5px;
+        }
+        #status-msg {
+            color: #34c759;
+            text-align: center;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>LEVEL UP COFFEE</h2>
+        <div class="info-row">
+            <span>👤 Никнейм:</span>
+            <span id="username">Загрузка...</span>
+        </div>
+        <div class="info-row">
+            <span>🆔 ID:</span>
+            <span id="user-id">-</span>
+        </div>
+        <hr style="border: 0.5px solid #3a3a3c;">
+        <div class="info-row">
+            <span>📊 Уровень:</span>
+            <strong id="level" style="color: #ff9500;">1</strong>
+        </div>
+        <div>Опыт (HP): <span id="hp-text">0/10</span></div>
+        <div class="progress-container">
+            <div id="progress" class="progress-bar"></div>
+        </div>
+        <div id="perks" class="perks">Загрузка бонусов...</div>
+    </div>
+
+    <div class="card">
+        <div class="info-row">
+            <span>💰 Бонусный счет:</span>
+            <strong id="balance" style="color: #34c759; font-size: 18px;">0 руб.</strong>
+        </div>
+        <div class="info-row">
+            <span>☕ Доступно кофе:</span>
+            <strong id="coffee" style="color: #5ac8fa; font-size: 18px;">0 шт.</strong>
+        </div>
+    </div>
+
+    <div style="width: 95%; max-width: 360px;">
+        <button class="btn" onclick="window.location.href='wheel.html'">🎡 Крутить Колесо Фортуны</button>
+        <button class="btn btn-secondary" onclick="giftCoffeeStub()">🎁 Подарить кофе другу</button>
+        <div id="status-msg"></div>
+    </div>
+
+    <script>
+        // Инициализируем Telegram Web App API
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Разворачиваем приложение лояльности на весь экран
+
+        // НАСТРОЙКИ SUPABASE
+        const SUPABASE_URL = "https://byfgtuqfoyupdtgxfvkr.supabase.co";
+        const SUPABASE_KEY = "ВСТАВЬ_СЮДА_СВОЙ_ANON_PUBLIC_KEY"; // Сюда вставь твой длинный anon public key
+        const supabase = lazySupabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // Получаем реальные данные пользователя из Телеграма (или тестовые для WebCode)
+        const tgUser = tg.initDataUnsafe?.user || { id: 777777, username: "Test_User" };
+        let localUserData = null;
+
+        const levelPerks = {
+            1: "Уровень 1: Колесо доступно!",
+            2: "Уровень 2: +5% к кэшбеку на баре",
+            3: "Уровень 3: +10% к кэшбеку на баре",
+            4: "Уровень 4: Бесплатный сироп к кофе",
+            5: "Уровень 5: Скидка 5% на всё меню",
+            6: "Уровень 6: Скидка 10% на всё меню",
+            7: "Уровень 7: Каждая 7-я чашка в подарок",
+            8: "Уровень 8: Доступ к VIP-розыгрышам",
+            9: "Уровень 9: Персональный десерт",
+            10: "👑 Уровень 10: Пожизненный кэшбек 20%!"
+        };
+
+        // Загрузка или создание профиля в базе
+        async function loadProfile() {
+            let { data: user, error } = await supabase.from('users').select('*').eq('id', tgUser.id).maybeSingle();
+            
+            if (!user) {
+                // Если записи нет в таблице, регистрируем нового гостя кофейни
+                const newUserData = {
+                    id: tgUser.id,
+                    username: tgUser.username || "Пользователь",
+                    bonus_balance: 0,
+                    coffee_cups: 0,
+                    hp: 0,
+                    level: 1
+                };
+                const { data } = await supabase.from('users').insert([newUserData]).select().single();
+                user = data;
+            }
+
+            localUserData = user;
+            updateUI();
+        }
+
+        // Обновление цифр и полосы прогресса на экране телефона
+        function updateUI() {
+            document.getElementById("username").innerText = "@" + localUserData.username;
+            document.getElementById("user-id").innerText = localUserData.id;
+            document.getElementById("level").innerText = localUserData.level;
+            document.getElementById("balance").innerText = localUserData.bonus_balance + " руб.";
+            document.getElementById("coffee").innerText = localUserData.coffee_cups + " шт.";
+            document.getElementById("hp-text").innerText = localUserData.hp + "/10";
+            
+            // Расчет зеленой полоски опыта
+            document.getElementById("progress").style.width = (localUserData.hp * 10) + "%";
+            document.getElementById("perks").innerText = levelPerks[localUserData.level] || "Бонусы уточняются";
+        }
+
+        // Тестовая заглушка для перевода кофе другу
+        function giftCoffeeStub() {
+            if (localUserData.coffee_cups <= 0) {
+                tg.showAlert("❌ У тебя нет чашек кофе для подарка!");
+                return;
+            }
+            
+            let friendId = prompt("Введите Telegram ID друга для отправки кофе:");
+            if (friendId) {
+                if (isNaN(friendId) || friendId.trim() === "") {
+                    tg.showAlert("❌ Ошибка: ID должен состоять только из цифр!");
+                } else {
+                    tg.showAlert(`✅ Тест заглушки успешен!\nID зафиксирован: ${friendId}\nКод отправки опущен по ТЗ.`);
+                }
+            }
+        }
+
+        // Запускаем загрузку данных при открытии
+        loadProfile();
+    </script>
+</body>
+</html>
